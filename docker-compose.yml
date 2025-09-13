@@ -7,6 +7,8 @@ services:
     environment:
       NODE_ENV: development
       NODE_PATH: /
+      DEMO_NO_PAYMENT: "true"
+      DATABASE_CONNECTION_STRING: "mongodb://mongodb:27017/expresscart"
     ports:
       - "1111:1111"
     links:
@@ -14,12 +16,12 @@ services:
     depends_on:
       - mongodb
   mongodb:
-    image: mongo:3.4.10
+    image: mongo:4.4
     container_name: "expresscart-mongodb"
     volumes:
       - expresscart-mongo-data:/data/db
     ports:
       - 27017:27017
-    command: mongod --smallfiles --logpath=/dev/null
+    command: mongod --logpath=/dev/null
 volumes:
   expresscart-mongo-data:

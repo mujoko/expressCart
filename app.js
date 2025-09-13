@@ -30,6 +30,7 @@ const ajv = new Ajv({ useDefaults: true });
 
 // get config
 const config = getConfig();
+const connectionString = process.env.DATABASE_CONNECTION_STRING || config.databaseConnectionString;
 
 const baseConfig = ajv.validate(require('./config/settingsSchema'), config);
 if(baseConfig === false){
@@ -341,7 +342,7 @@ handlebars = handlebars.create({
 
 // session store
 const store = new MongoStore({
-    uri: getDbUri(config.databaseConnectionString),
+    uri: getDbUri(connectionString),
     collection: 'sessions'
 });
 
@@ -474,7 +475,7 @@ app.on('uncaughtException', (err) => {
     process.exit(2);
 });
 
-initDb(config.databaseConnectionString, async (err, db) => {
+initDb(connectionString, async (err, db) => {
     // On connection error we display then exit
     if(err){
         console.log(colors.red(`Error connecting to MongoDB: ${err}`));
