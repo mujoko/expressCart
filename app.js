@@ -407,6 +407,7 @@ app.use((req, res, next) => {
 
 // Add a health check endpoint
 app.get('/health', (req, res) => {
+    console.log('Health check endpoint hit');
     res.status(200).send('OK');
 });
 
