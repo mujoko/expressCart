@@ -150,8 +150,7 @@ jobs:
             echo "ERROR: IMAGE_URI from build_and_push is empty"; exit 1
           fi
           jq --arg IMAGE "$IMAGE_URI" --arg DB_CONN_STRING "$DATABASE_CONNECTION_STRING_ECS" '
-            .containerDefinitions |= (map(if .name=="app" then .image=$IMAGE | .environment += [{"name":"DATABASE_CONNECTION_STRING","value":$DB_CONN_STRING}] else . end))
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
+            .containerDefinitions[0].image = $IMAGE | .containerDefinitions[0].environment += [{"name":"DATABASE_CONNECTION_STRING","value":$DB_CONN_STRING}] | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)
           ' task-def.json > new-task-def.json
 
       - name: Register new task definition
