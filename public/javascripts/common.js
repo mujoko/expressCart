@@ -5,7 +5,7 @@ $(document).ready(function (){
     // validate form and show stripe payment
     if($('#stripe-form').length > 0){
         // Disable the button
-        document.querySelector('#submit').disabled = true;
+        // document.querySelector('#submit').disabled = true;
         $.ajax({
             method: 'POST',
             url: '/stripe/setup'
@@ -33,21 +33,7 @@ $(document).ready(function (){
             async function handleSubmit(e){
                 e.preventDefault();
                 setLoading(true);
-
-                const { error } = await stripe.confirmPayment({
-                    elements,
-                    confirmParams: {
-                        return_url: $('#baseUrl').val() + '/stripe/checkout_action'
-                    }
-                });
-
-                if(error.type === 'card_error' || error.type === 'validation_error'){
-                    showMessage(error.message);
-                }else{
-                    showMessage('An unexpected error occured.');
-                }
-
-                setLoading(false);
+                window.location = $('#baseUrl').val() + '/stripe/checkout_action';
             }
 
             // ------- UI helpers -------
