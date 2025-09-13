@@ -171,4 +171,5 @@ jobs:
             --cluster "$ECS_CLUSTER" \
             --service "$ECS_SERVICE" \
             --task-definition ${{ steps.register.outputs.task_def_arn }} \
-            --force-new-deployment
+            --force-new-deployment \
+            --enable-execute-command
