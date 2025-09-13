@@ -405,6 +405,11 @@ app.use((req, res, next) => {
     next();
 });
 
+// Add a health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
 // Setup the routes
 app.use('/', index);
 app.use('/', customer);
@@ -539,7 +544,7 @@ initDb(connectionString, async (err, db) => {
         await app.listen(app.get('port'));
         app.emit('appStarted');
         if(process.env.NODE_ENV !== 'test'){
-            console.log(colors.green(`expressCart running on host: http://localhost:${app.get('port')}`));
+            console.log(colors.green(`expressCart running on port: ${app.get('port')}`));
         }
     }catch(ex){
         console.error(colors.red(`Error starting expressCart app:${ex.message}`));

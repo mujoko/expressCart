@@ -1122,6 +1122,12 @@ router.get('/page/:pageNum', (req, res, next) => {
 
 // The main entry point of the shop
 router.get('/:page?', async (req, res, next) => {
+    // Health check for AWS
+    if(req.headers['user-agent'] === 'ELB-HealthChecker/2.0'){
+        res.status(200).send('OK');
+        return;
+    }
+
     const db = req.app.db;
     const config = req.app.config;
     const numberProducts = config.productsPerPage ? config.productsPerPage : 6;
