@@ -1,4 +1,4 @@
-name: expressCart CI + ECR Push
+name: expressCart CI + ECR Push + ECS Deploy
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [18.x, 20.x]     # modern LTS
+        node: [18.x, 20.x]
         mongodb: [4.4]
     steps:
       - uses: actions/checkout@v4
@@ -47,14 +47,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (static keys)
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Ensure ECR repository exists (idempotent)
+      - name: Ensure ECR repository exists
         run: |
           aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 \
           || aws ecr create-repository --repository-name "$ECR_REPOSITORY" \
@@ -78,7 +78,6 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
 
       - name: Build & push
         id: buildpush
@@ -87,11 +86,62 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64   # ECS Fargate default arch
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          sbom: false
 
-      - name: Output IMAGE_URI
+      - name: Export IMAGE_URI
+        id: export
         run: |
           IMAGE_URI="${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}@${{ steps.buildpush.outputs.digest }}"
           echo "IMAGE_URI=$IMAGE_URI"
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy to ECS
+    needs: [build_and_push]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Get current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ secrets.ECS_SERVICE }} \
+            --query taskDefinition > task-def.json
+
+      - name: Create new task definition with updated image
+        run: |
+          IMAGE_URI=${{ needs.build_and_push.outputs.image_uri }}
+          cat task-def.json | \
+          jq --arg IMAGE "$IMAGE_URI" '
+            .containerDefinitions |=
+              (map(if .name=="app" then .image=$IMAGE else . end))
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+          ' > new-task-def.json
+
+      - name: Register new task definition
+        id: register
+        run: |
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --query taskDefinition.taskDefinitionArn \
+            --output text)
+          echo "task_def_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster ${{ secrets.ECS_CLUSTER }} \
+            --service ${{ secrets.ECS_SERVICE }} \
+            --task-definition ${{ steps.register.outputs.task_def_arn }} \
+            --force-new-deployment
