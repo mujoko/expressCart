@@ -494,7 +494,7 @@ initDb(connectionString, async (err, db) => {
     app.port = app.get('port');
 
     // Fire up the cron job to clear temp held stock
-    cron.schedule('*/1 * * * *', async () => {
+    cron.schedule('1 * * * *', async () => {
         const validSessions = await db.sessions.find({}).toArray();
         const validSessionIds = [];
         _.forEach(validSessions, (value) => {
@@ -523,7 +523,7 @@ initDb(connectionString, async (err, db) => {
 
     // Start cron job to index
     if(process.env.NODE_ENV !== 'test'){
-        cron.schedule('*/30 * * * *', async () => {
+        cron.schedule('30 * * * *', async () => {
             try{
                 await runIndexing(app);
             }catch(ex){
