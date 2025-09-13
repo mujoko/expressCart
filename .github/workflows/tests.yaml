@@ -44,6 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      image_uri: ${{ steps.export.outputs.image_uri }}
     steps:
       - uses: actions/checkout@v4
 
@@ -95,9 +97,7 @@ jobs:
       - name: Export IMAGE_URI
         id: export
         run: |
-          IMAGE_URI="${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}@${{ steps.buildpush.outputs.digest }}"
-          echo "IMAGE_URI=$IMAGE_URI"
-          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "image_uri=${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}@${{ steps.buildpush.outputs.digest }}" >> $GITHUB_OUTPUT
 
   deploy:
     name: Deploy to ECS
@@ -113,21 +113,33 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Get current task definition
+      - name: Read current task definition ARN from the service
+        id: cur
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+        run: |
+          TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          echo "task_def_arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Download current task definition JSON
         run: |
           aws ecs describe-task-definition \
-            --task-definition ${{ secrets.ECS_SERVICE }} \
+            --task-definition ${{ steps.cur.outputs.task_def_arn }} \
             --query taskDefinition > task-def.json
 
       - name: Create new task definition with updated image
         run: |
-          IMAGE_URI=${{ needs.build_and_push.outputs.image_uri }}
-          cat task-def.json | \
+          IMAGE_URI='${{ needs.build_and_push.outputs.image_uri }}'
           jq --arg IMAGE "$IMAGE_URI" '
             .containerDefinitions |=
               (map(if .name=="app" then .image=$IMAGE else . end))
             | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
-          ' > new-task-def.json
+          ' task-def.json > new-task-def.json
 
       - name: Register new task definition
         id: register
@@ -139,9 +151,12 @@ jobs:
           echo "task_def_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
       - name: Update ECS service
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
         run: |
           aws ecs update-service \
-            --cluster ${{ secrets.ECS_CLUSTER }} \
-            --service ${{ secrets.ECS_SERVICE }} \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
             --task-definition ${{ steps.register.outputs.task_def_arn }} \
             --force-new-deployment
