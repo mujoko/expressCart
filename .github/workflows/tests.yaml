@@ -142,14 +142,15 @@ jobs:
           path: .
 
       - name: Prepare new task definition (swap image)
+        env:
+          DATABASE_CONNECTION_STRING_ECS: ${{ secrets.DATABASE_CONNECTION_STRING_ECS }}
         run: |
           IMAGE_URI=$(cat image_uri.txt)
           if [ -z "$IMAGE_URI" ]; then
             echo "ERROR: IMAGE_URI from build_and_push is empty"; exit 1
           fi
-          jq --arg IMAGE "$IMAGE_URI" '
-            .containerDefinitions |=
-              (map(if .name=="app" then .image=$IMAGE else . end))
+          jq --arg IMAGE "$IMAGE_URI" --arg DB_CONN_STRING "$DATABASE_CONNECTION_STRING_ECS" '
+            .containerDefinitions |= (map(if .name=="app" then .image=$IMAGE | .environment += [{"name":"DATABASE_CONNECTION_STRING","value":$DB_CONN_STRING}] else . end))
             | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
           ' task-def.json > new-task-def.json
 
