@@ -91,10 +91,15 @@ jobs:
           provenance: false
           sbom: false
 
-      - name: Export IMAGE_URI
-        id: image
+      - name: Save IMAGE_URI to file
         run: |
-          echo "image_uri=${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}@${{ steps.buildpush.outputs.digest }}" >> $GITHUB_OUTPUT
+          echo "${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}@${{ steps.buildpush.outputs.digest }}" > image_uri.txt
+
+      - name: Upload IMAGE_URI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image_uri_artifact
+          path: image_uri.txt
 
   deploy:
     name: Deploy to ECS
@@ -130,10 +135,15 @@ jobs:
             --task-definition ${{ steps.cur.outputs.task_def_arn }} \
             --query taskDefinition > task-def.json
 
+      - name: Download IMAGE_URI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image_uri_artifact
+          path: .
+
       - name: Prepare new task definition (swap image)
-        env:
-          IMAGE_URI: ${{ needs.build_and_push.outputs.image_uri }}
         run: |
+          IMAGE_URI=$(cat image_uri.txt)
           if [ -z "$IMAGE_URI" ]; then
             echo "ERROR: IMAGE_URI from build_and_push is empty"; exit 1
           fi
